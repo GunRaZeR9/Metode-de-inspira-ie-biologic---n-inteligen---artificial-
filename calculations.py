@@ -1,3 +1,4 @@
+#====================== IMPORTS ======================
 import pandas
 import numpy as np
 import matplotlib.pyplot as plt
@@ -8,50 +9,104 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import accuracy_score, classification_report
 import time
 import random
-from matplotlib.ticker import FormatStrFormatter
 
 
+#====================== DATA LOADING AND ANALYSIS ======================
 def load_data():
+    """
+    Load data from the CSV file.
+    
+    Returns:
+    -------
+    pandas.DataFrame:
+        The loaded dataset
+    """
     FILE_PATH = "data/data.csv"
     df = pandas.read_csv(FILE_PATH)
     return df
 
 
 def get_public_orgs():
+    """
+    Count the number of public organizations in the dataset.
+    
+    Returns:
+    -------
+    int:
+        Number of public organizations
+    """
     df = load_data()
     public_df = df[df["Public?"] == 1]
     num = len(public_df)
     print("There are ", num, "public organizations.")
-
     return num
 
 
 def revenue_per_industry():
+    """
+    Calculate the average revenue per industry.
+    
+    Returns:
+    -------
+    pandas.Series:
+        Series containing average revenue for each industry
+    """
     df = load_data()
     revenue_by_industry = df.groupby("Industry")["Revenue"].sum()
     count_by_industry = df["Industry"].value_counts()
-
     rev_ratio = revenue_by_industry / count_by_industry
-
     return rev_ratio
 
 
 def highest_revenue_industry():
+    """
+    Find the industry with the highest total revenue.
+    
+    Returns:
+    -------
+    str:
+        Name of the industry with highest revenue
+    """
     df = load_data()
     revenue_by_industry = df.groupby("Industry")["Revenue"].sum()
     top_revenue_industry = revenue_by_industry.idxmax()
-
     return top_revenue_industry
 
 
-# GA Hyperparameter Optimization Functions
+#====================== GA COMPONENTS ======================
 def load_covtype_data():
+    """
+    Load the covtype dataset and split into train and test sets.
+    
+    Returns:
+    -------
+    tuple:
+        X_train, X_test, y_train, y_test
+    """
     print("Loading covtype dataset...")
     X, y = fetch_covtype(return_X_y=True)
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
     return X_train, X_test, y_train, y_test
 
+
 def evaluate_model(individual, X, y):
+    """
+    Evaluate a model with given hyperparameters using cross-validation.
+    
+    Parameters:
+    ----------
+    individual : list
+        List of hyperparameters [n_estimators, max_depth, min_samples_split, min_samples_leaf]
+    X : array-like
+        Feature matrix
+    y : array-like
+        Target vector
+        
+    Returns:
+    -------
+    tuple:
+        Single-element tuple containing the mean cross-validation accuracy
+    """
     n_estimators = individual[0]
     max_depth = individual[1]
     min_samples_split = individual[2]
@@ -73,7 +128,23 @@ def evaluate_model(individual, X, y):
         print(f"Error evaluating model: {e}")
         return 0.0,
 
+
 def setup_ga(X_train, y_train):
+    """
+    Set up the genetic algorithm toolbox for hyperparameter optimization.
+    
+    Parameters:
+    ----------
+    X_train : array-like
+        Training feature matrix
+    y_train : array-like
+        Training target vector
+        
+    Returns:
+    -------
+    deap.base.Toolbox:
+        Configured GA toolbox
+    """
     # Clean up any previous DEAP definitions to avoid errors on re-runs
     if 'FitnessMax' in creator.__dict__:
         del creator.FitnessMax
@@ -111,7 +182,26 @@ def setup_ga(X_train, y_train):
     
     return toolbox
 
+
+#====================== OPTIMIZATION FUNCTIONS ======================
 def run_optimization(pop_size=10, num_generations=5, verbose=True):
+    """
+    Run genetic algorithm optimization for hyperparameter tuning.
+    
+    Parameters:
+    ----------
+    pop_size : int
+        Population size for GA
+    num_generations : int
+        Number of generations to evolve
+    verbose : bool
+        Whether to print progress information and plot results
+        
+    Returns:
+    -------
+    dict:
+        Dictionary containing optimization results and metrics
+    """
     start_time = time.time()
     
     X_train, X_test, y_train, y_test = load_covtype_data()
@@ -205,7 +295,7 @@ def run_optimization(pop_size=10, num_generations=5, verbose=True):
         # Plot the results
         plot_optimization_results(log, accuracy, baseline_accuracy, best_hyperparams)
     
-    # Return more comprehensive results
+    # Return comprehensive results
     results = {
         'log': log,
         'best_hyperparams': best_hyperparams,
@@ -222,7 +312,16 @@ def run_optimization(pop_size=10, num_generations=5, verbose=True):
     
     return results
 
+
 def run_brute_force_comparison():
+    """
+    Run a brute force comparison of different GA parameter combinations.
+    
+    Returns:
+    -------
+    list:
+        List of dictionaries containing results for each parameter combination
+    """
     print("\n" + "="*50)
     print("RUNNING BRUTE FORCE COMPARISON OF GA PARAMETERS")
     print("="*50)
@@ -233,7 +332,6 @@ def run_brute_force_comparison():
     
     # Store results
     results = []
-    baseline_accuracy = None
     
     # Get a baseline model accuracy once to use for all comparisons
     X_train, X_test, y_train, y_test = load_covtype_data()
@@ -276,7 +374,70 @@ def run_brute_force_comparison():
     
     return results
 
+
+#====================== VISUALIZATION FUNCTIONS ======================
+def plot_optimization_results(log, accuracy, baseline_accuracy, best_hyperparams):
+    """
+    Plot the optimization progress and comparison with baseline.
+    
+    Parameters:
+    ----------
+    log : deap.tools.Logbook
+        Log of the GA evolution
+    accuracy : float
+        Accuracy of the best model
+    baseline_accuracy : float
+        Accuracy of the baseline model
+    best_hyperparams : list
+        Best hyperparameters found
+    """
+    gen = log.select("gen")
+    max_fitness = log.select("max")
+    avg_fitness = log.select("avg")
+    min_fitness = log.select("min")
+    std_fitness = log.select("std")
+
+    plt.figure(figsize=(12, 6))
+    plt.plot(gen, max_fitness, label="Max Fitness", marker='o')
+    plt.plot(gen, avg_fitness, label="Avg Fitness", marker='o')
+    plt.plot(gen, min_fitness, label="Min Fitness", marker='o')
+    plt.fill_between(gen, np.array(avg_fitness) - np.array(std_fitness), 
+                     np.array(avg_fitness) + np.array(std_fitness), alpha=0.2, label="Std Dev")
+    plt.title("GA Optimization Progress")
+    plt.xlabel("Generation")
+    plt.ylabel("Fitness (Accuracy)")
+    plt.legend()
+    plt.grid(True)
+    plt.tight_layout()
+    plt.savefig("ga_optimization_progress.png")
+    print("GA optimization progress plot saved to 'ga_optimization_progress.png'")
+    plt.show()
+
+    # Bar plot for accuracy comparison
+    plt.figure(figsize=(6, 5))
+    plt.bar(["Baseline", "GA Best"], [baseline_accuracy, accuracy], color=["gray", "blue"])
+    plt.title("Test Accuracy Comparison")
+    plt.ylabel("Accuracy")
+    plt.ylim(0, 1)
+    for i, v in enumerate([baseline_accuracy, accuracy]):
+        plt.text(i, v + 0.01, f"{v:.4f}", ha='center', fontweight='bold')
+    plt.tight_layout()
+    plt.savefig("ga_vs_baseline_accuracy.png")
+    print("GA vs Baseline accuracy plot saved to 'ga_vs_baseline_accuracy.png'")
+    plt.show()
+
+
 def visualize_brute_force_results(results, baseline_accuracy):
+    """
+    Visualize the results from brute force parameter comparison.
+    
+    Parameters:
+    ----------
+    results : list
+        List of dictionaries containing results for each parameter combination
+    baseline_accuracy : float
+        Accuracy of the baseline model
+    """
     # Organize data by population size and generations
     pop_sizes = sorted(list(set(r['pop_size'] for r in results)))
     generations = sorted(list(set(r['num_generations'] for r in results)))
@@ -294,7 +455,7 @@ def visualize_brute_force_results(results, baseline_accuracy):
         runtime_grid[pop_idx, gen_idx] = r['runtime']
         improvement_grid[pop_idx, gen_idx] = r['improvement']
     
-    # Create a 2x2 subplot
+    #----- Accuracy Heatmap and Parameter Analysis -----
     plt.figure(figsize=(18, 12))
     
     # Plot 1: Heatmap of accuracy
@@ -362,7 +523,7 @@ def visualize_brute_force_results(results, baseline_accuracy):
     print("\nBrute force comparison visualization saved to 'ga_parameter_comparison.png'")
     plt.show()
     
-    # Create a separate figure for improvement percentages
+    #----- Improvement Percentages -----
     plt.figure(figsize=(10, 6))
     configs = [f"P{r['pop_size']}-G{r['num_generations']}" for r in results]
     improvements = [r['improvement_percent'] for r in results]
@@ -391,7 +552,7 @@ def visualize_brute_force_results(results, baseline_accuracy):
     print("Improvement comparison visualization saved to 'ga_improvement_comparison.png'")
     plt.show()
     
-    # Third figure - Best hyperparameter values for each configuration
+    #----- Hyperparameter Analysis -----
     plt.figure(figsize=(15, 10))
     
     # Extract values for each hyperparameter
@@ -430,7 +591,12 @@ def visualize_brute_force_results(results, baseline_accuracy):
     print("Hyperparameter comparison by configuration saved to 'ga_hyperparameters_by_config.png'")
     plt.show()
 
+
+#====================== MAIN EXECUTION ======================
 def main():
+    """
+    Main function to run the analysis and optimization.
+    """
     # Run original calculations
     print("Running original calculations...")
     try:
